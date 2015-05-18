@@ -1,0 +1,18 @@
+NAME 
+  lnano - Lua nano or Like nano. A slightly less primitive file editor.
+SYNOPSIS
+  lnano 
+  lnano FILE
+DESCRIPTION
+  A file editor based upon GNU/Nano. Provides most or all features needed for programming such as copy/paste , syntax highlighting , , find , etc.
+OPTIONS
+  -h 
+    Equivalent to running man lnano and displays this message.
+  -v
+    Show the current version and exit.
+  -r 
+    Opens file as read only.
+  -b
+    When saving a file, back up the previous version of it to the current filename suffixed with a ~.
+  -c=dir
+    Set the directory where nano puts unique backup files if file backups are enabled.
