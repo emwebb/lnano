@@ -4,15 +4,15 @@ SYNOPSIS
   lnano 
   lnano FILE
 DESCRIPTION
-  A file editor based upon GNU/Nano. Provides most or all features needed for programming such as copy/paste , syntax highlighting , , find , etc.
+  A file editor based upon GNU/Nano. Provides most or all features needed for programming such as copy/paste , syntax highlighting , find , etc.
 OPTIONS
-  -h 
+  -h (--help)
     Equivalent to running man lnano and displays this message.
-  -v
+  -v (--version)
     Show the current version and exit.
-  -r 
+  -r (--readonly)
     Opens file as read only.
-  -b
+  -b (--backup)
     When saving a file, back up the previous version of it to the current filename suffixed with a ~.
-  -c=dir
+  -c=dir (--backupdir=dir)
     Set the directory where nano puts unique backup files if file backups are enabled.
