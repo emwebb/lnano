@@ -63,6 +63,11 @@ local cursor = {}
 cursor.line = 0 
 cursor.column = 0
 
+local view = {}
+view.x = 0
+view.y = 0
+
+
 local filename = nil  -- The name of the file we are currently editing.
 local newfile = nil   -- Is this a new file or are we editing a pre existing one?
 
@@ -116,6 +121,37 @@ else
 	end
 end
 
+local renderer = {};
+renderer.sideBarWidth = 6
+renderer.topBarHeight = 2
+renderer.bottomBarHeight = 4
+function renderer.drawTextView() 
+	screenwidth,screenheight = gpu.getResolution()
+	renderer.textViewWidth = screenwidth - renderer.sideBarWidth
+	renderer.textViewHeight = screenheight - renderer.topBarHeight - renderer.bottomBarHeight
+	renderer.textViewX = renderer.sideBarWidth
+	renderer.textViewY = renderer.topBarHeight
+	for y = 1, renderer.textViewHeight , 1 do
+		if text[y + view.y] then
+			for x = view.x + 1,  view.x + renderer.textViewWidth do
+				local c = text[y + view.y]:sub(x,x) 
+				if c == "" then c = " " end
+				gpu.set(x+renderer.textViewX - view.x,y+renderer.textViewY,c)
+			end
+			
+		else
+			gpu.fill(renderer.textViewX,y+renderer.textViewY,renderer.textViewWidth,1," ")
+		end
+	end
+	
+end
+
+function renderer.drawLineNumber()
+	for y = 1, renderer.textViewHeight , 1 do
+	 gpu.set(0,y + renderer.topBarHeight,string.format ("%5.0f", y + view.y))
+	end
+end
+
 local function lnanoerror() 
 
 end
@@ -163,3 +199,7 @@ if newfile then
 else
 	loadFileIntoBuffer()
 end
+screenwidth,screenheight = gpu.getResolution()
+gpu.fill(0,0,screenwidth,screenheight," ")
+renderer.drawTextView() 
+renderer.drawLineNumber()
