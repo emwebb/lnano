@@ -66,22 +66,26 @@ cursor.column = 0
 local filename = nil  -- The name of the file we are currently editing.
 local newfile = nil   -- Is this a new file or are we editing a pre existing one?
 
+local rtconfig = {} -- Runtime Config
 -- These process the options.
-local readonly = options.r or options.readonly  	-- Should we allow them to edit the file.
-local backup = options.b or options.backup    		-- Should we make a backup?
-local backupdir = options.c or options.backupdir    -- If so, where?
-local showhelp = options.h or options.help          -- Should we display the help?
-local showversion = options.v or options.version    -- Should we display the version?
+rtconfig.readonly = options.r or options.readonly  	-- Should we allow them to edit the file.
+rtconfig.backup = options.b or options.backup    		-- Should we make a backup?
+rtconfig.backupdir = shell.resolve(options.c or options.backupdir or "")   -- If so, where?
+rtconfig.showhelp = options.h or options.help          -- Should we display the help?
+rtconfig.showversion = options.v or options.version    -- Should we display the version?
 
+
+
+logger:log("Runtime config :"..serialization.serialize(rtconfig))
 -- Have we been asked to do something which means we don't need to actually load/make a file?
-local doPreFileShutdown = showhelp or showversion
+local doPreFileShutdown = rtconfig.showhelp or rtconfig.showversion
 
 
-if showhelp then 
+if rtconfig.showhelp then 
 	logger:log("h(elp) option present. Running \"man lnano\" then exiting")
 	shell.execute("man lnano")
 end
-if showversion then
+if rtconfig.showversion then
 	logger:log("v(ersion) option present. Displaying version then exiting")
 	print("LNANO "..versionName.." ("..versionNum..")");
 end
@@ -89,39 +93,73 @@ end
 if doPreFileShutdown then return end -- If we have been asked to do something that doesn't require us to load/make a file then exit now.
 
 if #args == 0 then
+	
 	-- No file specified. So we will create a new one with no name.
 	newfile = true
-	filename = "untitled"
+	filename = shell.resolve("untitled")
+	logger:log("No file specified. New file with filename \""..filename.."\".")
 	
 else
 	filename = shell.resolve(args[1])
 	if fs.exists(filename) then
 		-- A file that exist is specified.
 		newfile = false
-		readOnly = readonly or fs.get(filename) == nil or fs.get(filename).isReadOnly()
+		rtconfig.readonly = rtconfig.readonly or fs.get(filename).isReadOnly()
+		logger:log("An existing file with filename\""..filename.."\" has been specified")
+		if rtconfig.readonly then
+			logger:log("Opening file as read only.")
+		end
 	else
 		newfile = true
+		logger:log("A new file with filename\""..filename.."\" has been specified")
 		-- A file that does not exist is specified.
 	end
 end
 
+local function lnanoerror() 
+
+end
+
 local function loadFileIntoBuffer() --Loads the file into the text buffer.
-	local f = io.open(filename)
+	local f = io.open(filename,'r')
   	if f then
   		for line in f:lines() do
       		table.insert(text, line)
       	end
+    	if #text == 0 then
+    		table.insert(text,"")
+    	end
+    	f:close()
     end
 end
 
--- DEBUG
-loadFileIntoBuffer()
-
-logger:log(serialization.serialize(text))
+local function saveFileFromBuffer() --Save the buffer into a file.
+	if rtconfig.readonly or fs.get(filename).isReadOnly() then
+		logger:log("Attempted to save buffer to \""..filename.."\" but can not due to read only. This should never happen.")
+		lnanoerror()
+		return
+	end
 	
+	if rtconfig.backup and fs.exists(filename) then
+		local backupLoc = rtconfig.backupdir.."~"..filename:match( "([^/]+)$")
+		logger:log("Backing up \""..filename.."\" to \""..backupLoc.."\".")
+		fs.copy(filename,backupLoc)
+	end
 		
 	
+	local f = io.open(filename,'w')
+  	if f then
+  		for line in text do
+      		f:write(line..'\n')
+      	end
+      	
+    f:close()
+    end
+    
+end
 
-
-		
-	
+if newfile then
+	table.insert(text,"") -- We need a starting point
+else
+	loadFileIntoBuffer()
+end
