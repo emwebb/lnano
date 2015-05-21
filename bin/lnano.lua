@@ -82,12 +82,13 @@ if doPreFileShutdown then return end -- If we have been asked to do something th
 -- SECTION INIT
 
 local text = {} -- The text buffer , stored as an array of lines.
-local colour = {} -- The colour buffer , mapped to the text buffer rather than the screen.
+local colourBuffer = {} -- The colour buffer , mapped to the text buffer rather than the screen.
 
 local cursor = {}
 -- The location of the cursor in the text.
 cursor.line = 1 
 cursor.column = 1
+
 
 local view = {}
 view.x = 0
@@ -101,10 +102,84 @@ end
 local filename = nil  -- The name of the file we are currently editing.
 local newfile = nil   -- Is this a new file or are we editing a pre existing one?
 
+local colours = {}
+if gpu.getDepth() == 1 then
+    colours = {
+        viewBackground          = 0x000000,
+        menuBackground          = 0x000000,
+        normalText              = 0xFFFFFF,
+        menuText                = 0xFFFFFF,
+        syntax                  = {
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF,
+                                    0xFFFFFF
+                                    }
+    }
+else
+    colours = {
+        viewBackground          = 0x000000,
+        menuBackground          = 0x333333,
+        normalText              = 0xFFFFFF,
+        menuText                = 0x9AA1A1,
+        syntax                  = {
+                                    gpu.getPaletteColor(0),
+                                    gpu.getPaletteColor(1),
+                                    gpu.getPaletteColor(2),
+                                    gpu.getPaletteColor(3),
+                                    gpu.getPaletteColor(4),
+                                    gpu.getPaletteColor(5),
+                                    gpu.getPaletteColor(6),
+                                    gpu.getPaletteColor(7),
+                                    gpu.getPaletteColor(8),
+                                    gpu.getPaletteColor(9),
+                                    gpu.getPaletteColor(10),
+                                    gpu.getPaletteColor(11),
+                                    gpu.getPaletteColor(12),
+                                    gpu.getPaletteColor(13),
+                                    gpu.getPaletteColor(14),
+                                    gpu.getPaletteColor(15)
+                                    }
+    }
+end
+
+
+logger:log(serialization.serialize(colours))
+
+
 local renderer = {};
 renderer.sideBarWidth = 7
 renderer.topBarHeight = 2
 renderer.bottomBarHeight = 4
+
+function renderer.drawTextViewLine(texty,textviewy) 
+    if text[texty] then
+        for x = view.x,  view.x + renderer.textViewWidth do
+            local c = text[texty]:sub(x,x) 
+            if c == "" then c = " " end
+            gpu.setForeground(colours.normalText)
+            gpu.setBackground(colours.viewBackground)
+            gpu.set(x+renderer.textViewX - view.x,textviewy+renderer.textViewY ,c)
+        end
+    else
+        gpu.fill(renderer.textViewX,textviewy+renderer.textViewY ,renderer.textViewWidth,1," ")
+    end
+
+end 
+
+
 function renderer.drawTextView() 
     screenwidth,screenheight = gpu.getResolution()
     renderer.textViewWidth = screenwidth - renderer.sideBarWidth
@@ -112,19 +187,12 @@ function renderer.drawTextView()
     renderer.textViewX = renderer.sideBarWidth
     renderer.textViewY = renderer.topBarHeight
     for y = 1, renderer.textViewHeight  , 1 do
-        if text[y + view.y] then
-            for x = view.x,  view.x + renderer.textViewWidth do
-                local c = text[y + view.y]:sub(x,x) 
-                if c == "" then c = " " end
-                gpu.set(x+renderer.textViewX - view.x,y+renderer.textViewY ,c)
-            end
-            
-        else
-            gpu.fill(renderer.textViewX,y+renderer.textViewY,renderer.textViewWidth,1," ")
-        end
+        renderer.drawTextViewLine(y + view.y,y) 
     end
     
 end
+
+function renderer.update() end
 
 function renderer.getCursorScreenLocation()
     local viewx, viewy = view.getCursorViewPos()
@@ -133,22 +201,75 @@ function renderer.getCursorScreenLocation()
 end
 
 function renderer.drawLineNumber()
+    gpu.setBackground(colours.menuBackground)
+    gpu.setForeground(colours.menuText)
+    gpu.fill(1,renderer.topBarHeight+1,renderer.sideBarWidth,renderer.textViewHeight," ")
     for y = 1, renderer.textViewHeight , 1 do
-     gpu.set(0,y + renderer.topBarHeight ,string.format ("%5.0f", y + view.y).."|⌙")
+     gpu.set(0,y + renderer.topBarHeight ,string.format ("%6.0f", y + view.y).."┃ ")
     end
 end
 
 function renderer.drawHeader()
+    screenwidth,screenheight = gpu.getResolution()
+    gpu.setBackground(colours.menuBackground)
+    gpu.setForeground(colours.menuText)
+    gpu.fill(1,1,screenwidth,renderer.topBarHeight," ")
     local info = "lnano "..versionName.." ("..versionNum..") file: "..filename
     if rtconfig.readonly then info = info.." [read only]" end
     gpu.set(1,1,info)
+    gpu.fill(1,renderer.topBarHeight,screenwidth,1,"━")
+    gpu.set(renderer.sideBarWidth-1,renderer.topBarHeight,"┳")
+end
+
+function renderer.drawFooter()
+    screenwidth,screenheight = gpu.getResolution()
+    gpu.setBackground(colours.menuBackground)
+    gpu.setForeground(colours.menuText)
+    gpu.fill(1,renderer.textViewHeight + renderer.topBarHeight + 1 ,screenwidth,renderer.bottomBarHeight," ")
+    gpu.fill(1,renderer.textViewHeight + renderer.topBarHeight + 1 ,screenwidth,1,"━")
+    gpu.set(renderer.sideBarWidth-1,renderer.textViewHeight + renderer.topBarHeight + 1,"┻")
 end
 
 function renderer.redraw()
+
+    screenwidth,screenheight = gpu.getResolution()
+    
+    gpu.setForeground(colours.normalText)
+    gpu.setBackground(colours.viewBackground)
+    
+    gpu.fill(1,1,screenwidth,screenheight," ")
     renderer.drawTextView() 
     renderer.drawLineNumber()
     renderer.drawHeader()
+    renderer.drawFooter()
 end
+
+function cursor.move(x,y) 
+
+    
+    local cx,cy = renderer.getCursorScreenLocation()
+    local str , fore = gpu.get(cx,cy)
+    gpu.setForeground(fore)
+        
+    gpu.setBackground(0x000000)
+    gpu.set(cx,cy,str)
+    
+    cursor.line = cursor.line + y
+    cursor.column = cursor.column + x
+    
+    cx,cy = renderer.getCursorScreenLocation()
+    str , fore = gpu.get(cx,cy)
+    gpu.setForeground(fore)
+        
+    gpu.setBackground(0xFFFFFF)
+    gpu.set(cx,cy,str)
+end
+
+
+function writeChar(char)
+
+end
+
 
 local function lnanoerror() 
 
@@ -226,6 +347,35 @@ end
 
 local running = true
 
+local keyboardHandler = {
+    normal = {
+        [keyboard.keys.down] = function() 
+            cursor.move(0,1)
+        
+        end,
+        [keyboard.keys.up] = function() 
+            cursor.move(0,-1)
+        
+        end,
+        [keyboard.keys.left] = function() 
+            cursor.move(-1,0)
+        
+        end,
+        [keyboard.keys.right] = function() 
+            cursor.move(1,0)
+        
+        end,
+    },
+    control = {},
+    alt = {},
+    controlAlt = {}
+}
+
+
+
+
+
+
 local eventHandler = {}
 eventHandler.events = {}
 
@@ -237,9 +387,33 @@ function eventHandler.events.key_down(keyBoardAdress,char,code,playerName)
     if code then
         keyboard.pressedCodes[code] = true
     end
-    logger:log(tostring(code))
+    
+    if not (keyboard.isControlDown() or keyboard.isAltDown()) then
+        
+            logger:log("Correct Section"..tostring(char))
+        if char then
+            if not (keyboard.isControl(char) or ( char >= 0xE000 and char <= 0xF8FF)) then
+                writeChar(char)
+            else
+                if keyboardHandler.normal[code] then
+                    keyboardHandler.normal[code]()
+                end
+            end
+        else
+            if keyboardHandler.normal[code] then
+                keyboardHandler.normal[code]()
+            end
+        
+        end
+    
+    end
+    
     if  keyboard.isControlDown() and keyboard.pressedCodes[keyboard.keys.q] then 
         running = false
+    end
+    
+    if  keyboard.isControlDown() and keyboard.pressedCodes[keyboard.keys.r] then 
+        renderer.redraw()
     end
 end
 
@@ -296,8 +470,6 @@ if newfile then
 else
     loadFileIntoBuffer()
 end
-screenwidth,screenheight = gpu.getResolution()
-gpu.fill(1,1,screenwidth,screenheight," ")
 renderer.redraw()
 
 timerManager.registerTimers() 
