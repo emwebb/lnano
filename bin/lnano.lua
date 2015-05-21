@@ -21,7 +21,7 @@ function createLogger()
     		else
       			self.logNumber = logNumber
       			found = true
-   			end
+   			end     
   		end
   	self.logFile = self.loggerFolder.."log-"..self.logNumber..".log"
   	self.initTime = os.time()
@@ -60,12 +60,16 @@ local colour = {} -- The colour buffer , mapped to the text buffer rather than t
 
 local cursor = {}
 -- The location of the cursor in the text.
-cursor.line = 0 
-cursor.column = 0
+cursor.line = 1 
+cursor.column = 1
 
 local view = {}
 view.x = 0
 view.y = 0
+
+function view.getCursorViewPos() 
+	return cursor.column - view.x , cursor.line - view.y
+end
 
 
 local filename = nil  -- The name of the file we are currently editing.
@@ -122,7 +126,7 @@ else
 end
 
 local renderer = {};
-renderer.sideBarWidth = 6
+renderer.sideBarWidth = 7
 renderer.topBarHeight = 2
 renderer.bottomBarHeight = 4
 function renderer.drawTextView() 
@@ -131,12 +135,12 @@ function renderer.drawTextView()
 	renderer.textViewHeight = screenheight - renderer.topBarHeight - renderer.bottomBarHeight
 	renderer.textViewX = renderer.sideBarWidth
 	renderer.textViewY = renderer.topBarHeight
-	for y = 1, renderer.textViewHeight , 1 do
+	for y = 1, renderer.textViewHeight  , 1 do
 		if text[y + view.y] then
-			for x = view.x + 1,  view.x + renderer.textViewWidth do
+			for x = view.x,  view.x + renderer.textViewWidth do
 				local c = text[y + view.y]:sub(x,x) 
 				if c == "" then c = " " end
-				gpu.set(x+renderer.textViewX - view.x,y+renderer.textViewY,c)
+				gpu.set(x+renderer.textViewX - view.x,y+renderer.textViewY ,c)
 			end
 			
 		else
@@ -146,10 +150,22 @@ function renderer.drawTextView()
 	
 end
 
+function renderer.getCursorScreenLocation()
+	local viewx, viewy = view.getCursorViewPos()
+	
+	return viewx + renderer.sideBarWidth , viewy + renderer.topBarHeight
+end
+
 function renderer.drawLineNumber()
 	for y = 1, renderer.textViewHeight , 1 do
-	 gpu.set(0,y + renderer.topBarHeight,string.format ("%5.0f", y + view.y))
+	 gpu.set(0,y + renderer.topBarHeight ,string.format ("%5.0f", y + view.y).."|⌙")
 	end
+end
+
+function renderer.drawHeader()
+	local info = "lnano "..versionName.." ("..versionNum..") file: "..filename
+	if rtconfig.readonly then info = info.." [read only]" end
+	gpu.set(1,1,info)
 end
 
 local function lnanoerror() 
@@ -200,6 +216,50 @@ else
 	loadFileIntoBuffer()
 end
 screenwidth,screenheight = gpu.getResolution()
-gpu.fill(0,0,screenwidth,screenheight," ")
+gpu.fill(1,1,screenwidth,screenheight," ")
 renderer.drawTextView() 
 renderer.drawLineNumber()
+renderer.drawHeader()
+
+local timerManager = {}
+function timerManager.registerFlashTimer()
+	local flash = true
+	
+	timerManager.flashTimer = event.timer(0.5, function()
+	    if flash then
+	        flash = false
+	        gpu.setBackground(0xFFFFFF)
+	    else       
+	        flash = true
+	        gpu.setBackground(0x000000)
+	    end
+	    
+	    local x,y = renderer.getCursorScreenLocation()
+	    local str , fore = gpu.get(x,y)
+	    gpu.setForeground(fore)
+		gpu.set(x,y,str)
+		gpu.setBackground(0x000000)
+	end, math.huge)
+
+end
+function timerManager.registerTimers() 
+    timerManager.registerFlashTimer()
+
+end
+
+function timerManager.unregister() 
+    event.cancel(timerManager.flashTimer)
+
+end 
+
+local running = true
+
+timerManager.registerTimers() 
+
+while running do
+	local eventName, arg1, arg2, arg3, arg4 = event.pull()
+	logger:log("Event : Name = "..tostring(eventName).."Args = "..tostring(arg1)..","..tostring(arg2)..","..tostring(arg3)..","..tostring(arg4).." .")
+	if eventName == "key_down" then running = false end
+end
+timerManager.unregister() 
+term.clear()
