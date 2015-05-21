@@ -1,3 +1,4 @@
+-- SECTION REQUIREMENTS 
 local fs = require("filesystem")
 local term = require("term")
 local computer = require("computer")
@@ -7,7 +8,7 @@ local gpu = require("component").gpu
 local serialization = require("serialization")
 local io = require("io")
 local shell = require("shell")
-
+-- SECTION PRE INIT
 --Create the logger
 function createLogger()
 	local logger = {}
@@ -51,29 +52,8 @@ local versionName = "0.0"
 logger:init("lnano")
 logger:log("Starting LNANO "..versionName.." ("..versionNum..")")
 
-
+--SECTION ARGUMENTS
 local args, options = shell.parse(...)
-
-
-local text = {} -- The text buffer , stored as an array of lines.
-local colour = {} -- The colour buffer , mapped to the text buffer rather than the screen.
-
-local cursor = {}
--- The location of the cursor in the text.
-cursor.line = 1 
-cursor.column = 1
-
-local view = {}
-view.x = 0
-view.y = 0
-
-function view.getCursorViewPos() 
-	return cursor.column - view.x , cursor.line - view.y
-end
-
-
-local filename = nil  -- The name of the file we are currently editing.
-local newfile = nil   -- Is this a new file or are we editing a pre existing one?
 
 local rtconfig = {} -- Runtime Config
 -- These process the options.
@@ -82,8 +62,6 @@ rtconfig.backup = options.b or options.backup    		-- Should we make a backup?
 rtconfig.backupdir = shell.resolve(options.c or options.backupdir or "")   -- If so, where?
 rtconfig.showhelp = options.h or options.help          -- Should we display the help?
 rtconfig.showversion = options.v or options.version    -- Should we display the version?
-
-
 
 logger:log("Runtime config :"..serialization.serialize(rtconfig))
 -- Have we been asked to do something which means we don't need to actually load/make a file?
@@ -101,29 +79,27 @@ end
 
 if doPreFileShutdown then return end -- If we have been asked to do something that doesn't require us to load/make a file then exit now.
 
-if #args == 0 then
-	
-	-- No file specified. So we will create a new one with no name.
-	newfile = true
-	filename = shell.resolve("untitled")
-	logger:log("No file specified. New file with filename \""..filename.."\".")
-	
-else
-	filename = shell.resolve(args[1])
-	if fs.exists(filename) then
-		-- A file that exist is specified.
-		newfile = false
-		rtconfig.readonly = rtconfig.readonly or fs.get(filename).isReadOnly()
-		logger:log("An existing file with filename\""..filename.."\" has been specified")
-		if rtconfig.readonly then
-			logger:log("Opening file as read only.")
-		end
-	else
-		newfile = true
-		logger:log("A new file with filename\""..filename.."\" has been specified")
-		-- A file that does not exist is specified.
-	end
+-- SECTION INIT
+
+local text = {} -- The text buffer , stored as an array of lines.
+local colour = {} -- The colour buffer , mapped to the text buffer rather than the screen.
+
+local cursor = {}
+-- The location of the cursor in the text.
+cursor.line = 1 
+cursor.column = 1
+
+local view = {}
+view.x = 0
+view.y = 0
+
+function view.getCursorViewPos() -- returns the cursor location with in the view index starts at 1
+	return cursor.column - view.x , cursor.line - view.y
 end
+
+
+local filename = nil  -- The name of the file we are currently editing.
+local newfile = nil   -- Is this a new file or are we editing a pre existing one?
 
 local renderer = {};
 renderer.sideBarWidth = 7
@@ -210,17 +186,6 @@ local function saveFileFromBuffer() --Save the buffer into a file.
     
 end
 
-if newfile then
-	table.insert(text,"") -- We need a starting point
-else
-	loadFileIntoBuffer()
-end
-screenwidth,screenheight = gpu.getResolution()
-gpu.fill(1,1,screenwidth,screenheight," ")
-renderer.drawTextView() 
-renderer.drawLineNumber()
-renderer.drawHeader()
-
 local timerManager = {}
 function timerManager.registerFlashTimer()
 	local flash = true
@@ -252,14 +217,93 @@ function timerManager.unregister()
 
 end 
 
+
 local running = true
+
+local eventHandler = {}
+eventHandler.events = {}
+
+function eventHandler.events.key_down(keyBoardAdress,char,code,playerName) 
+
+    if char then
+        keyboard.pressedChars[char] = true
+    end
+    if code then
+        keyboard.pressedCodes[code] = true
+    end
+    logger:log(tostring(code))
+    if  keyboard.isControlDown() and keyboard.pressedCodes[keyboard.keys.q] then 
+        running = false
+    end
+end
+
+function eventHandler.events.key_up(keyBoardAdress,char,code,playerName) 
+    if char then
+        keyboard.pressedChars[char] = false
+    end
+    
+     if code then
+        keyboard.pressedCodes[code] = false
+    end
+end
+
+
+function eventHandler.handle(eventName, arg1, arg2, arg3, arg4)
+
+    if eventName then
+    
+        if eventHandler.events[eventName] then
+            eventHandler.events[eventName](arg1,arg2,arg3,arg4)
+        end
+    end
+    
+end
+
+-- Start the program
+
+if #args == 0 then
+	
+	-- No file specified. So we will create a new one with no name.
+	newfile = true
+	filename = shell.resolve("untitled")
+	logger:log("No file specified. New file with filename \""..filename.."\".")
+	
+else
+	filename = shell.resolve(args[1])
+	if fs.exists(filename) then
+		-- A file that exist is specified.
+		newfile = false
+		rtconfig.readonly = rtconfig.readonly or fs.get(filename).isReadOnly()
+		logger:log("An existing file with filename\""..filename.."\" has been specified")
+		if rtconfig.readonly then
+			logger:log("Opening file as read only.")
+		end
+	else
+		newfile = true
+		logger:log("A new file with filename\""..filename.."\" has been specified")
+		-- A file that does not exist is specified.
+	end
+end
+
+if newfile then
+	table.insert(text,"") -- We need a starting point
+else
+	loadFileIntoBuffer()
+end
+screenwidth,screenheight = gpu.getResolution()
+gpu.fill(1,1,screenwidth,screenheight," ")
+renderer.drawTextView() 
+renderer.drawLineNumber()
+renderer.drawHeader()
+
 
 timerManager.registerTimers() 
 
+
+
 while running do
 	local eventName, arg1, arg2, arg3, arg4 = event.pull()
-	logger:log("Event : Name = "..tostring(eventName).."Args = "..tostring(arg1)..","..tostring(arg2)..","..tostring(arg3)..","..tostring(arg4).." .")
-	if eventName == "key_down" then running = false end
+	eventHandler.handle(eventName, arg1, arg2, arg3, arg4)
 end
 timerManager.unregister() 
 term.clear()
