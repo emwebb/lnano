@@ -109,6 +109,7 @@ if gpu.getDepth() == 1 then
         menuBackground          = 0x000000,
         normalText              = 0xFFFFFF,
         menuText                = 0xFFFFFF,
+        flash                   = 0xFFFFFF,
         syntax                  = {
                                     0xFFFFFF,
                                     0xFFFFFF,
@@ -134,6 +135,7 @@ else
         menuBackground          = 0x333333,
         normalText              = 0xFFFFFF,
         menuText                = 0x9AA1A1,
+        flash                   = 0x9AA1A1,
         syntax                  = {
                                     gpu.getPaletteColor(0),
                                     gpu.getPaletteColor(1),
@@ -166,7 +168,7 @@ renderer.bottomBarHeight = 4
 
 function renderer.drawTextViewLine(texty,textviewy) 
     if text[texty] then
-        for x = view.x,  view.x + renderer.textViewWidth do
+        for x = view.x + 1,  view.x + renderer.textViewWidth do
             local c = text[texty]:sub(x,x) 
             if c == "" then c = " " end
             gpu.setForeground(colours.normalText)
@@ -174,7 +176,7 @@ function renderer.drawTextViewLine(texty,textviewy)
             gpu.set(x+renderer.textViewX - view.x,textviewy+renderer.textViewY ,c)
         end
     else
-        gpu.fill(renderer.textViewX,textviewy+renderer.textViewY ,renderer.textViewWidth,1," ")
+        gpu.fill(renderer.textViewX + 1,textviewy+renderer.textViewY ,renderer.textViewWidth,1," ")
     end
 
 end 
@@ -186,6 +188,8 @@ function renderer.drawTextView()
     renderer.textViewHeight = screenheight - renderer.topBarHeight - renderer.bottomBarHeight
     renderer.textViewX = renderer.sideBarWidth
     renderer.textViewY = renderer.topBarHeight
+    gpu.setBackground(colours.viewBackground)
+    gpu.fill(renderer.textViewX + 1,renderer.textViewY + 1,renderer.textViewWidth,renderer.textViewHeight ," ")
     for y = 1, renderer.textViewHeight  , 1 do
         renderer.drawTextViewLine(y + view.y,y) 
     end
@@ -245,24 +249,91 @@ function renderer.redraw()
 end
 
 function cursor.move(x,y) 
+    
+    local pline = cursor.line + y
+    local pcolumn = cursor.column + x
+    
+    if pcolumn < 1 then
+        if not (pline < 2) then
+            y = y - 1
+            x = x + text[cursor.line - 1]:len() + 1
+        else
+            x = -cursor.column + 1
+        end
+    end
+    
+    if pcolumn > text[cursor.line]:len() + 1 then
+        if not (cursor.line == #text) then
+            y = y + 1
+            x = x - text[cursor.line]:len() - 1
+        else
+            x = text[cursor.line]:len() -cursor.column + 1
+        end
+    end
+    
+    pline = cursor.line + y
+    pcolumn = cursor.column + x
+    
+    if pline < 1 then 
+        y = -cursor.line + 1
+    end
+    if pline > #text then
+        y = #text - cursor.line 
+    end
+    
+    pline = cursor.line + y
+    pcolumn = cursor.column + x
+    
+    if pcolumn > text[pline]:len() + 1 then
+        x = text[pline]:len() -cursor.column + 1
 
+    end
+    
+    
     
     local cx,cy = renderer.getCursorScreenLocation()
     local str , fore = gpu.get(cx,cy)
     gpu.setForeground(fore)
         
-    gpu.setBackground(0x000000)
+    gpu.setBackground(colours.viewBackground)
     gpu.set(cx,cy,str)
     
     cursor.line = cursor.line + y
     cursor.column = cursor.column + x
     
+    view.moveViewToCursor()
+    
     cx,cy = renderer.getCursorScreenLocation()
     str , fore = gpu.get(cx,cy)
     gpu.setForeground(fore)
         
-    gpu.setBackground(0xFFFFFF)
+    gpu.setBackground(colours.flash)
     gpu.set(cx,cy,str)
+end
+
+function view.moveViewToCursor()
+    vcx,vcy = view.getCursorViewPos()
+    
+    if vcx < 0 then
+        view.x = view.x + vcx - 1
+        renderer.drawTextView() 
+    end
+    if vcx > renderer.textViewWidth  then
+        view.x = view.x + vcx - renderer.textViewWidth
+        renderer.drawTextView() 
+    end
+    
+    if vcy < 1 then
+        view.y = view.y + vcy - 1
+        renderer.drawTextView()
+        renderer.drawLineNumber()
+    end
+    if vcy > renderer.textViewHeight  then
+        view.y = view.y + vcy - renderer.textViewHeight
+        renderer.drawTextView()
+        renderer.drawLineNumber()
+    end
+
 end
 
 
@@ -320,17 +391,17 @@ function timerManager.registerFlashTimer()
     timerManager.flashTimer = event.timer(0.5, function()
         if flash then
             flash = false
-            gpu.setBackground(0xFFFFFF)
+            gpu.setBackground(colours.flash)
         else       
             flash = true
-            gpu.setBackground(0x000000)
+            gpu.setBackground(colours.viewBackground)
         end
         
         local x,y = renderer.getCursorScreenLocation()
         local str , fore = gpu.get(x,y)
         gpu.setForeground(fore)
         gpu.set(x,y,str)
-        gpu.setBackground(0x000000)
+        gpu.setBackground(colours.viewBackground)
     end, math.huge)
 
 end
@@ -481,4 +552,6 @@ while running do
     eventHandler.handle(eventName, arg1, arg2, arg3, arg4)
 end
 timerManager.unregister() 
+gpu.setBackground(0x000000)
+gpu.setForeground(0xFFFFFF)
 term.clear()
