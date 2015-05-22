@@ -314,6 +314,7 @@ end
 function view.moveViewToCursor()
     vcx,vcy = view.getCursorViewPos()
     
+    
     if vcx < 0 then
         view.x = view.x + vcx - 1
         renderer.drawTextView() 
@@ -337,8 +338,17 @@ function view.moveViewToCursor()
 end
 
 
-function writeChar(char)
+function insertChar(pos, str, r)
+    return str:sub(1, pos - 1) .. r .. str:sub(pos, str:len())
+end
 
+function writeChar(char)
+    if not rtconfig.readonly then
+        text[cursor.line] = insertChar(cursor.column,text[cursor.line],string.char(char))
+        local x,y = view.getCursorViewPos()
+        renderer.drawTextViewLine(cursor.line,y) 
+        cursor.move(1,0)
+    end
 end
 
 
@@ -461,7 +471,6 @@ function eventHandler.events.key_down(keyBoardAdress,char,code,playerName)
     
     if not (keyboard.isControlDown() or keyboard.isAltDown()) then
         
-            logger:log("Correct Section"..tostring(char))
         if char then
             if not (keyboard.isControl(char) or ( char >= 0xE000 and char <= 0xF8FF)) then
                 writeChar(char)
