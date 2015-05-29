@@ -8,6 +8,7 @@ local gpu = require("component").gpu
 local serialization = require("serialization")
 local io = require("io")
 local shell = require("shell")
+local unicode = require("unicode")
 -- SECTION PRE INIT
 --Create the logger
 function createLogger()
@@ -166,9 +167,9 @@ renderer.sideBarWidth = 7
 renderer.topBarHeight = 2
 renderer.bottomBarHeight = 4
 
-function renderer.drawTextViewLine(texty,textviewy) 
+function renderer.drawTextViewLine(texty,textviewy , xs , width) 
     if text[texty] then
-        for x = view.x + 1,  view.x + renderer.textViewWidth do
+        for x = view.x + xs,  view.x + width do
             local c = text[texty]:sub(x,x) 
             if c == "" then c = " " end
             gpu.setForeground(colours.normalText)
@@ -176,7 +177,7 @@ function renderer.drawTextViewLine(texty,textviewy)
             gpu.set(x+renderer.textViewX - view.x,textviewy+renderer.textViewY ,c)
         end
     else
-        gpu.fill(renderer.textViewX + 1,textviewy+renderer.textViewY ,renderer.textViewWidth,1," ")
+        gpu.fill(renderer.textViewX + xs,textviewy+renderer.textViewY ,width,1," ")
     end
 
 end 
@@ -191,7 +192,21 @@ function renderer.drawTextView()
     gpu.setBackground(colours.viewBackground)
     gpu.fill(renderer.textViewX + 1,renderer.textViewY + 1,renderer.textViewWidth,renderer.textViewHeight ," ")
     for y = 1, renderer.textViewHeight  , 1 do
-        renderer.drawTextViewLine(y + view.y,y) 
+        renderer.drawTextViewLine(y + view.y,y,1,renderer.textViewWidth ) 
+    end
+    
+end
+
+function renderer.drawTextColumns(x,width) 
+    screenwidth,screenheight = gpu.getResolution()
+    renderer.textViewWidth = screenwidth - renderer.sideBarWidth
+    renderer.textViewHeight = screenheight - renderer.topBarHeight - renderer.bottomBarHeight
+    renderer.textViewX = renderer.sideBarWidth
+    renderer.textViewY = renderer.topBarHeight
+    gpu.setBackground(colours.viewBackground)
+    --gpu.fill(renderer.textViewX + x ,renderer.textViewY + 1,width --[[No idea why I need to do -4]],renderer.textViewHeight ," ")
+    for y = 1, renderer.textViewHeight  , 1 do
+        renderer.drawTextViewLine(y + view.y,y,x,width ) 
     end
     
 end
@@ -315,13 +330,15 @@ function view.moveViewToCursor()
     vcx,vcy = view.getCursorViewPos()
     
     
-    if vcx < 0 then
+    if vcx < 1 then
         view.x = view.x + vcx - 1
-        renderer.drawTextView() 
+        gpu.copy(renderer.sideBarWidth - vcx + 1,renderer.textViewY,renderer.textViewWidth + vcx - 1,renderer.textViewHeight,-vcx + 1,0)
+        renderer.drawTextColumns(1,-vcx + 1)
     end
     if vcx > renderer.textViewWidth  then
         view.x = view.x + vcx - renderer.textViewWidth
-        renderer.drawTextView() 
+         gpu.copy(renderer.sideBarWidth + vcx - renderer.textViewWidth + 1,renderer.textViewY,vcx - 2,renderer.textViewHeight + 1,-vcx + renderer.textViewWidth ,0)
+        --renderer.drawTextColumns(6 ,10)
     end
     
     if vcy < 1 then
@@ -344,9 +361,9 @@ end
 
 function writeChar(char)
     if not rtconfig.readonly then
-        text[cursor.line] = insertChar(cursor.column,text[cursor.line],string.char(char))
+        text[cursor.line] = insertChar(cursor.column,text[cursor.line],unicode.char(char))
         local x,y = view.getCursorViewPos()
-        renderer.drawTextViewLine(cursor.line,y) 
+        renderer.drawTextViewLine(cursor.line,y,1,renderer.textViewWidth ) 
         cursor.move(1,0)
     end
 end
